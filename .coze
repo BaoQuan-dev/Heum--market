@@ -1,0 +1,11 @@
+[project]
+entrypoint = "HNAU_SecondHand/home.html"
+requires = ["nodejs-24"]
+
+[dev]
+build = []
+run = ["python3", "-m", "http.server", "5000"]
+
+[deploy]
+build = []
+run = ["python3", "-m", "http.server", "5000"]
