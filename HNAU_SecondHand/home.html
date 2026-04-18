@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="河南农业大学闲置物品交易平台">
+    <title>农大闲置 - 河南农业大学闲置物品交易平台</title>
+    <link rel="stylesheet" href="./style/main.css">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <!-- Logo -->
+            <a href="home.html" class="navbar-brand">
+                <img src="./images/logo.png" alt="农大闲置" class="navbar-logo" onerror="this.style.display='none'">
+                <span>🌱 农大闲置</span>
+            </a>
+
+            <!-- 导航菜单（PC端） -->
+            <ul class="navbar-menu">
+                <li class="navbar-menu-item">
+                    <a href="home.html" class="navbar-menu-link active">首页</a>
+                </li>
+                <li class="navbar-menu-item">
+                    <a href="javascript:void(0)" class="navbar-menu-link" id="releaseBtn">发布闲置</a>
+                </li>
+                <li class="navbar-menu-item">
+                    <a href="stu_check.html" class="navbar-menu-link">校园认证</a>
+                </li>
+                <li class="navbar-menu-item">
+                    <a href="user_center.html" class="navbar-menu-link">个人中心</a>
+                </li>
+                <li class="navbar-menu-item">
+                    <a href="manage_admin.html" class="navbar-menu-link">管理员</a>
+                </li>
+            </ul>
+
+            <!-- 用户操作 -->
+            <div class="navbar-actions">
+                <!-- JS渲染 -->
+            </div>
+
+            <!-- 汉堡菜单按钮（移动端） -->
+            <button class="navbar-hamburger" aria-label="菜单">
+                <span class="navbar-hamburger-line"></span>
+                <span class="navbar-hamburger-line"></span>
+                <span class="navbar-hamburger-line"></span>
+            </button>
+        </div>
+
+        <!-- 移动端菜单 -->
+        <div class="navbar-mobile-menu">
+            <a href="home.html" class="navbar-mobile-menu-item active">首页</a>
+            <a href="javascript:void(0)" class="navbar-mobile-menu-item" id="mobileReleaseBtn">发布闲置</a>
+            <a href="stu_check.html" class="navbar-mobile-menu-item">校园认证</a>
+            <a href="user_center.html" class="navbar-mobile-menu-item">个人中心</a>
+            <a href="manage_admin.html" class="navbar-mobile-menu-item">管理员</a>
+            <div class="navbar-mobile-actions">
+                <!-- JS渲染 -->
+            </div>
+        </div>
+
+        <!-- 遮罩层 -->
+        <div class="navbar-overlay"></div>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <main class="main-content" id="homeContent">
+        <!-- 搜索筛选区 -->
+        <section class="container" style="padding-top: 30px; padding-bottom: 20px;">
+            <div class="card">
+                <div class="search-bar">
+                    <!-- 搜索框 -->
+                    <div class="search-input-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" class="search-input" 
+                               placeholder="搜索商品名称..." autocomplete="off">
+                        <div class="search-suggestions" id="searchSuggestions"></div>
+                    </div>
+                    <button class="btn btn-primary" id="searchBtn">搜索</button>
+                </div>
+
+                <!-- 筛选条件 -->
+                <div class="d-flex gap-md flex-wrap" style="margin-top: 15px;">
+                    <div class="filter-group">
+                        <label class="filter-label">校区：</label>
+                        <select id="filterCampus" class="filter-select">
+                            <option value="">全部校区</option>
+                            <option value="郑州龙子湖">郑州龙子湖</option>
+                            <option value="郑州文化路">郑州文化路</option>
+                            <option value="郑州桃李园">郑州桃李园</option>
+                            <option value="许昌">许昌</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">分类：</label>
+                        <select id="filterCategory" class="filter-select">
+                            <option value="">全部分类</option>
+                            <option value="农业书籍">农业书籍</option>
+                            <option value="实验器材">实验器材</option>
+                            <option value="教材资料">教材资料</option>
+                            <option value="宿舍用品">宿舍用品</option>
+                            <option value="数码电子">数码电子</option>
+                            <option value="生活日化">生活日化</option>
+                            <option value="体育用品">体育用品</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-outline btn-sm" id="clearFilterBtn">清除筛选</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 商品展示区 -->
+        <section class="container" style="padding-top: 0; padding-bottom: 30px;">
+            <div class="goods-grid" id="goodsGrid">
+                <!-- JS渲染 -->
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer-text">🌱 河南农业大学·绿色校园闲置循环平台 | 践行双碳目标，共建绿色校园</p>
+        </div>
+    </footer>
+
+    <!-- 脚本 -->
+    <script src="./script/common.js"></script>
+    <script src="./script/home.js"></script>
+    <script>
+        // 移动端发布按钮
+        document.addEventListener('DOMContentLoaded', function() {
+            var mobileReleaseBtn = document.getElementById('mobileReleaseBtn');
+            if (mobileReleaseBtn) {
+                mobileReleaseBtn.addEventListener('click', function() {
+                    Auth.requireReleasePermission(function() {
+                        Utils.跳转('release_goods.html');
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>
