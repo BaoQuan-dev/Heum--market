@@ -308,13 +308,33 @@ const Auth = {
      * @returns {Object} { passed: boolean, level: number, message: string, redirect: string }
      */
     checkReleasePermission() {
-        const verifyState = this.getVerifyState();
-        const users = this.getUsers();
         const loginState = this.getLoginState();
+        const users = this.getUsers();
+        
+        // 【关键修复】优先读取用户数据中的 authStatus
+        let verifyState = this.VERIFY_STATE.UNSUBMITTED;
+        
+        if (loginState.isLogin && loginState.curUser) {
+            // 已登录用户，优先使用用户数据中的认证状态
+            const userAuthStatus = this.getUserAuthStatus(loginState.curUser);
+            if (userAuthStatus) {
+                verifyState = userAuthStatus;
+            }
+        }
+        
+        // 如果用户数据中没有 authStatus，使用全局状态（兼容旧数据）
+        if (verifyState === this.VERIFY_STATE.UNSUBMITTED) {
+            const globalVerifyState = this.getVerifyState();
+            if (globalVerifyState !== this.VERIFY_STATE.UNSUBMITTED) {
+                verifyState = globalVerifyState;
+            }
+        }
+        
+        console.log('[Auth] 发布权限校验 - 认证状态:', verifyState);
 
         // 校验1：未认证或待审核
-        if (verifyState !== this.VERIFY_STATE.APPROVED) {
-            if (verifyState === this.VERIFY_STATE.UNSUBMITTED) {
+        if (verifyState !== this.VERIFY_STATE.APPROVED && verifyState !== 'approved') {
+            if (verifyState === this.VERIFY_STATE.UNSUBMITTED || verifyState === 'unsubmitted') {
                 return {
                     passed: false,
                     level: 1,
@@ -322,12 +342,20 @@ const Auth = {
                     type: 'error',
                     redirect: 'stu_check.html'
                 };
-            } else if (verifyState === this.VERIFY_STATE.PENDING) {
+            } else if (verifyState === this.VERIFY_STATE.PENDING || verifyState === 'pending') {
                 return {
                     passed: false,
                     level: 1,
                     message: '您的认证正在审核中，请等待审核通过后再发布商品',
                     type: 'warning',
+                    redirect: 'stu_check.html'
+                };
+            } else if (verifyState === 'rejected') {
+                return {
+                    passed: false,
+                    level: 1,
+                    message: '您的认证申请被拒绝，请重新提交认证信息',
+                    type: 'error',
                     redirect: 'stu_check.html'
                 };
             }
@@ -493,9 +521,9 @@ const Auth = {
     },
     
     /**
-     * 【新增】根据用户名更新用户的认证状态
+     * 【新增】根据学号更新用户的认证状态
      * @param {string} username - 用户名
-     * @param {string} authStatus - 认证状态 (unsubmitted/pending/approved/rejected)
+     * @param {string} authStatus - 认证状态
      */
     updateUserAuthStatus(username, authStatus) {
         const users = this.getUsers();
@@ -504,6 +532,26 @@ const Auth = {
             users[userIndex].authStatus = authStatus;
             Storage.set(this.KEYS.USERS, users);
             console.log('[Auth] 用户认证状态已更新:', username, '->', authStatus);
+            return true;
+        }
+        return false;
+    },
+    
+    /**
+     * 【新增】根据学号在待审核列表中关联用户名
+     * @param {string} studentId - 学号
+     * @param {string} newStatus - 新状态
+     * @param {string} username - 关联的用户名
+     */
+    updatePendingAuthByStudentId(studentId, newStatus, username) {
+        const pendingList = this.getPendingAuths();
+        const index = pendingList.findIndex(a => a.studentId === studentId && a.status === 'pending');
+        if (index !== -1) {
+            pendingList[index].status = newStatus;
+            pendingList[index].username = username;  // 关联用户名
+            pendingList[index].updateTime = new Date().toISOString();
+            Storage.set(this.KEYS.PENDING_AUTHS, pendingList);
+            console.log('[Auth] 待审核记录已关联:', studentId, '<->', username);
             return true;
         }
         return false;

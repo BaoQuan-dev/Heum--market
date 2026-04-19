@@ -1269,9 +1269,31 @@ const AdminModule = {
                     // 更新全局认证状态
                     localStorage.setItem(ADMIN_KEYS.VERIFY_STATE, VERIFY_STATES.APPROVED);
                     
-                    // 【关键修改】同步更新用户的认证状态
-                    // 需要通过学号找到对应的用户并更新其 authStatus
-                    this.updateUserAuthStatusByStudentId(auth.studentId, 'approved');
+                    // 【关键修改】同步更新用户的认证状态，并关联用户名
+                    const usersStr = localStorage.getItem(ADMIN_KEYS.USERS);
+                    if (usersStr) {
+                        let users = JSON.parse(usersStr);
+                        let updated = false;
+                        users.forEach(user => {
+                            // 如果用户认证状态不是 approved，说明是待审核用户
+                            if (user.authStatus === 'pending') {
+                                user.authStatus = 'approved';
+                                // 如果 pendingAuth 中有用户名，关联到用户
+                                if (auth.username) {
+                                    user.username = auth.username;
+                                }
+                                updated = true;
+                            }
+                            // 如果用户学号匹配，也更新
+                            if (user.studentId === auth.studentId) {
+                                user.authStatus = 'approved';
+                            }
+                        });
+                        if (updated) {
+                            localStorage.setItem(ADMIN_KEYS.USERS, JSON.stringify(users));
+                            console.log('[Admin] 用户认证状态已更新:', authStatus);
+                        }
+                    }
                     
                     // 更新认证信息（保持向后兼容）
                     localStorage.setItem(ADMIN_KEYS.VERIFY_INFO, JSON.stringify({

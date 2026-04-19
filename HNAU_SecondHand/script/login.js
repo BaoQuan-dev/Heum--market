@@ -439,15 +439,24 @@ const LoginModule = {
                 return;
             }
 
-            // 创建用户 - 【关键修改】添加 authStatus 字段
+            // 创建用户 - 【关键修改】添加 authStatus 字段和关联认证信息
+            const verifyInfo = Auth.getVerifyInfo();
             const userInfo = {
                 username: username,
                 password: password,
                 regTime: Utils.formatDate(new Date()),
-                authStatus: 'unsubmitted'  // 新增：认证状态 (unsubmitted/pending/approved/rejected)
+                authStatus: verifyInfo ? 'approved' : 'unsubmitted',  // 如果有认证信息，直接设为已认证
+                studentId: verifyInfo ? verifyInfo.studentId : '',      // 关联学号
+                campus: verifyInfo ? verifyInfo.campus : '',             // 关联校区
+                college: verifyInfo ? verifyInfo.college : ''           // 关联学院
             };
 
             Auth.registerUser(userInfo);
+
+            // 【新增】如果有关联的认证信息，同步更新 pendingAuths 记录
+            if (verifyInfo) {
+                Auth.updatePendingAuthByStudentId(verifyInfo.studentId, 'approved', username);
+            }
 
             Toast.show('注册成功！请切换到登录页登录', 'success');
 
