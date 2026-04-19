@@ -1,14 +1,21 @@
 /**
  * ============================================
  * 河南农业大学·农大闲置 - 管理员后台逻辑
- * 功能：审核/列表/状态同步/数据管理
+ * 功能：认证审核/用户管理/商品管理
+ * 【已修复】标签页切换和按钮交互问题
  * ============================================
  */
 
-// 管理员账号
+// 管理员账号配置
 const ADMIN_ACCOUNT = {
     username: 'admin',
     password: '123456'
+};
+
+// 存储键名（管理员专用）
+const ADMIN_KEYS = {
+    PROCESSED_VERIFIES: 'hnau_admin_processed_verifies',  // 已处理的认证记录
+    ADMIN_LOGGED_IN: 'hnau_admin_logged_in'              // 管理员登录状态
 };
 
 const AdminModule = {
@@ -21,17 +28,88 @@ const AdminModule = {
         goods: []
     },
 
-    /**
-     * 初始化
-     */
+    // ==========================================
+    // 【核心修复】使用事件委托，避免重复绑定
+    // ==========================================
     init() {
+        // 检查管理员登录状态
+        this.state.isLoggedIn = localStorage.getItem(ADMIN_KEYS.ADMIN_LOGGED_IN) === 'true';
+        
         this.render();
-        this.bindEvents();
+        
+        // 【关键修复】使用事件委托，统一处理所有点击事件
+        document.addEventListener('click', (e) => this.handleGlobalClick(e));
     },
 
     /**
-     * 渲染页面
+     * 【核心修复】统一事件处理器
      */
+    handleGlobalClick(e) {
+        // 退出登录按钮
+        if (e.target.id === 'adminLogoutBtn') {
+            this.handleLogout();
+            return;
+        }
+
+        // 登录表单提交
+        if (e.target.id === 'adminLoginBtn' || e.target.closest('#adminLoginForm')) {
+            if (e.target.type === 'submit' || e.target.closest('form')) {
+                e.preventDefault();
+                this.handleLogin();
+            }
+            return;
+        }
+
+        // 选项卡切换
+        const tabItem = e.target.closest('.tabs-nav-item');
+        if (tabItem) {
+            const tabName = tabItem.dataset.tab;
+            if (tabName) {
+                this.switchTab(tabName);
+            }
+            return;
+        }
+
+        // 【关键】认证审核 - 通过按钮
+        if (e.target.classList.contains('approve-verify-btn')) {
+            const studentId = e.target.dataset.id;
+            if (studentId) {
+                this.handleApprove(studentId);
+            }
+            return;
+        }
+
+        // 【关键】认证审核 - 拒绝按钮
+        if (e.target.classList.contains('reject-verify-btn')) {
+            const studentId = e.target.dataset.id;
+            if (studentId) {
+                this.handleReject(studentId);
+            }
+            return;
+        }
+
+        // 商品管理 - 删除按钮
+        if (e.target.classList.contains('delete-goods-btn')) {
+            const goodsId = e.target.dataset.id;
+            if (goodsId) {
+                this.handleDeleteGoods(goodsId);
+            }
+            return;
+        }
+
+        // 图片预览
+        if (e.target.classList.contains('verify-image')) {
+            const src = e.target.dataset.src;
+            if (src) {
+                this.showImagePreview(src);
+            }
+            return;
+        }
+    },
+
+    // ==========================================
+    // 渲染方法
+    // ==========================================
     render() {
         const container = document.getElementById('adminContent');
         if (!container) return;
@@ -41,11 +119,6 @@ const AdminModule = {
         } else {
             this.renderDashboard(container);
         }
-
-        // 渲染完成后绑定事件
-        setTimeout(() => {
-            this.bindEvents();
-        }, 50);
     },
 
     /**
@@ -76,15 +149,6 @@ const AdminModule = {
                 </form>
             </div>
         `;
-
-        // 绑定登录表单事件
-        const form = document.getElementById('adminLoginForm');
-        if (form) {
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleLogin();
-            });
-        }
     },
 
     /**
@@ -110,38 +174,36 @@ const AdminModule = {
                 </div>
             </div>
 
-            <!-- 选项卡 -->
+            <!-- 管理面板 -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">📊 管理面板</h2>
                     <button class="btn btn-outline btn-sm" id="adminLogoutBtn">退出登录</button>
                 </div>
 
+                <!-- 选项卡 -->
                 <div class="tabs-nav" style="margin-bottom: 20px;">
                     <div class="tabs-nav-item ${this.state.activeTab === 'verify' ? 'active' : ''}" data-tab="verify">认证审核</div>
                     <div class="tabs-nav-item ${this.state.activeTab === 'users' ? 'active' : ''}" data-tab="users">用户管理</div>
                     <div class="tabs-nav-item ${this.state.activeTab === 'goods' ? 'active' : ''}" data-tab="goods">商品管理</div>
                 </div>
 
-                <!-- 认证审核 -->
+                <!-- 认证审核面板 -->
                 <div class="tabs-panel ${this.state.activeTab === 'verify' ? 'active' : ''}" id="verifyPanel">
                     ${this.renderVerifyList()}
                 </div>
 
-                <!-- 用户管理 -->
+                <!-- 用户管理面板 -->
                 <div class="tabs-panel ${this.state.activeTab === 'users' ? 'active' : ''}" id="usersPanel">
                     ${this.renderUsersList()}
                 </div>
 
-                <!-- 商品管理 -->
+                <!-- 商品管理面板 -->
                 <div class="tabs-panel ${this.state.activeTab === 'goods' ? 'active' : ''}" id="goodsPanel">
                     ${this.renderGoodsList()}
                 </div>
             </div>
         `;
-
-        // 绑定仪表盘事件
-        this.bindDashboardEvents();
     },
 
     /**
@@ -174,10 +236,10 @@ const AdminModule = {
                     <tbody>
                         ${this.state.pendingVerifies.map(verify => `
                             <tr>
-                                <td>${Utils.escapeHtml(verify.studentId)}</td>
-                                <td>${Utils.escapeHtml(verify.campus)}</td>
-                                <td>${verify.subCampus ? Utils.escapeHtml(verify.subCampus) : '-'}</td>
-                                <td>${Utils.escapeHtml(verify.college)}</td>
+                                <td>${this.escapeHtml(verify.studentId)}</td>
+                                <td>${this.escapeHtml(verify.campus)}</td>
+                                <td>${verify.subCampus ? this.escapeHtml(verify.subCampus) : '-'}</td>
+                                <td>${this.escapeHtml(verify.college)}</td>
                                 <td>
                                     ${verify.studentCardImage ? `
                                         <img src="${verify.studentCardImage}" alt="学生证" 
@@ -185,11 +247,11 @@ const AdminModule = {
                                              data-src="${verify.studentCardImage}">
                                     ` : '-'}
                                 </td>
-                                <td>${Utils.formatDate(verify.submitTime)}</td>
+                                <td>${this.formatDate(verify.submitTime)}</td>
                                 <td>
                                     <div class="list-table-actions">
-                                        <button class="btn btn-sm btn-success approve-verify-btn" data-id="${verify.studentId}">通过</button>
-                                        <button class="btn btn-sm btn-danger reject-verify-btn" data-id="${verify.studentId}">拒绝</button>
+                                        <button class="btn btn-sm btn-success approve-verify-btn" data-id="${this.escapeHtml(verify.studentId)}">通过</button>
+                                        <button class="btn btn-sm btn-danger reject-verify-btn" data-id="${this.escapeHtml(verify.studentId)}">拒绝</button>
                                     </div>
                                 </td>
                             </tr>
@@ -213,6 +275,17 @@ const AdminModule = {
             `;
         }
 
+        // 获取所有认证信息
+        const verifyInfo = this.getVerifyInfo();
+        const verifyState = this.getVerifyState();
+
+        const stateMap = {
+            'unsubmitted': { text: '未认证', class: 'pending' },
+            'pending': { text: '审核中', class: 'pending' },
+            'approved': { text: '已认证', class: 'approved' }
+        };
+        const state = stateMap[verifyState] || stateMap['unsubmitted'];
+
         return `
             <div class="list-table-wrapper">
                 <table class="list-table">
@@ -227,27 +300,16 @@ const AdminModule = {
                         </tr>
                     </thead>
                     <tbody>
-                        ${this.state.users.map(user => {
-                            const verifyInfo = Auth.getVerifyInfo();
-                            const verifyState = Auth.getVerifyState();
-                            const stateMap = {
-                                'unsubmitted': { text: '未认证', class: 'pending' },
-                                'pending': { text: '审核中', class: 'pending' },
-                                'approved': { text: '已认证', class: 'approved' }
-                            };
-                            const state = stateMap[verifyState] || stateMap['unsubmitted'];
-
-                            return `
-                                <tr>
-                                    <td>${Utils.escapeHtml(user.username)}</td>
-                                    <td>${verifyInfo ? Utils.escapeHtml(verifyInfo.studentId) : '-'}</td>
-                                    <td>${verifyInfo ? Utils.escapeHtml(verifyInfo.campus) : '-'}</td>
-                                    <td>${verifyInfo ? Utils.escapeHtml(verifyInfo.college) : '-'}</td>
-                                    <td>${Utils.formatDate(user.regTime)}</td>
-                                    <td><span class="status-badge ${state.class}">${state.text}</span></td>
-                                </tr>
-                            `;
-                        }).join('')}
+                        ${this.state.users.map(user => `
+                            <tr>
+                                <td>${this.escapeHtml(user.username)}</td>
+                                <td>${verifyInfo ? this.escapeHtml(verifyInfo.studentId) : '-'}</td>
+                                <td>${verifyInfo ? this.escapeHtml(verifyInfo.campus) : '-'}</td>
+                                <td>${verifyInfo ? this.escapeHtml(verifyInfo.college) : '-'}</td>
+                                <td>${this.formatDate(user.regTime)}</td>
+                                <td><span class="status-badge ${state.class}">${state.text}</span></td>
+                            </tr>
+                        `).join('')}
                     </tbody>
                 </table>
             </div>
@@ -284,12 +346,12 @@ const AdminModule = {
                     <tbody>
                         ${this.state.goods.map(goods => `
                             <tr>
-                                <td>${Utils.escapeHtml(goods.name)}</td>
-                                <td style="color: var(--error-color); font-weight: 600;">¥${goods.price.toFixed(2)}</td>
-                                <td>${goods.category}</td>
-                                <td>${goods.campus}</td>
-                                <td>${Utils.escapeHtml(goods.publisher)}</td>
-                                <td>${Utils.formatDate(goods.publishTime)}</td>
+                                <td>${this.escapeHtml(goods.name)}</td>
+                                <td style="color: var(--error-color); font-weight: 600;">¥${typeof goods.price === 'number' ? goods.price.toFixed(2) : goods.price}</td>
+                                <td>${goods.category || '-'}</td>
+                                <td>${goods.campus || '-'}</td>
+                                <td>${this.escapeHtml(goods.publisher || '-')}</td>
+                                <td>${this.formatDate(goods.publishTime)}</td>
                                 <td>
                                     <div class="list-table-actions">
                                         <button class="btn btn-sm btn-danger delete-goods-btn" data-id="${goods.id}">删除</button>
@@ -303,225 +365,295 @@ const AdminModule = {
         `;
     },
 
-    /**
-     * 加载数据
-     */
-    loadData() {
-        // 待审核认证
-        const verifyInfo = Auth.getVerifyInfo();
-        const verifyState = Auth.getVerifyState();
-
-        this.state.pendingVerifies = [];
-        if (verifyState === Auth.VERIFY_STATE.PENDING && verifyInfo) {
-            this.state.pendingVerifies.push(verifyInfo);
-        }
-
-        // 用户列表
-        this.state.users = Auth.getUsers();
-
-        // 商品列表
-        this.state.goods = Auth.getGoods();
-    },
-
-    /**
-     * 绑定事件
-     */
-    bindEvents() {
-        if (!this.state.isLoggedIn) {
-            // 登录表单事件
-            const form = document.getElementById('adminLoginForm');
-            if (form) {
-                form.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.handleLogin();
-                });
-            }
-        } else {
-            // 仪表盘事件
-            this.bindDashboardEvents();
-        }
-    },
-
-    /**
-     * 绑定仪表盘事件
-     */
-    bindDashboardEvents() {
-        // 退出登录
-        const logoutBtn = document.getElementById('adminLogoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => {
-                Modal.confirm('退出登录', '确定要退出管理员登录吗？', () => {
-                    this.state.isLoggedIn = false;
-                    this.render();
-                    this.bindEvents();
-                });
-            });
-        }
-
-        // 选项卡切换
-        const tabItems = document.querySelectorAll('.tabs-nav-item');
-        tabItems.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const tabName = tab.dataset.tab;
-                this.switchTab(tabName);
-            });
-        });
-
-        // 认证审核按钮
-        this.bindVerifyEvents();
-
-        // 商品管理按钮
-        this.bindGoodsEvents();
-    },
+    // ==========================================
+    // 【关键修复】事件处理方法
+    // ==========================================
 
     /**
      * 切换选项卡
      */
     switchTab(tabName) {
         this.state.activeTab = tabName;
-
-        // 更新选项卡状态
-        const tabItems = document.querySelectorAll('.tabs-nav-item');
-        tabItems.forEach(tab => {
-            if (tab.dataset.tab === tabName) {
-                tab.classList.add('active');
-            } else {
-                tab.classList.remove('active');
-            }
-        });
-
-        // 更新面板状态
-        const panels = document.querySelectorAll('.tabs-panel');
-        panels.forEach(panel => {
-            if (panel.id === `${tabName}Panel`) {
-                panel.classList.add('active');
-            } else {
-                panel.classList.remove('active');
-            }
-        });
-
-        // 重新绑定事件
-        this.bindVerifyEvents();
-        this.bindGoodsEvents();
-    },
-
-    /**
-     * 绑定认证审核事件
-     */
-    bindVerifyEvents() {
-        // 图片预览
-        const imageBtns = document.querySelectorAll('.verify-image');
-        imageBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const src = btn.dataset.src;
-                ImagePreview.show(src);
-            });
-        });
-
-        // 通过按钮
-        const approveBtns = document.querySelectorAll('.approve-verify-btn');
-        approveBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const studentId = btn.dataset.id;
-                Modal.confirm('通过认证', `确定要通过学号 ${studentId} 的认证申请吗？`, () => {
-                    Auth.updateVerifyState(Auth.VERIFY_STATE.APPROVED, studentId);
-                    Toast.show('认证已通过', 'success');
-                    this.loadData();
-                    this.render();
-                });
-            });
-        });
-
-        // 拒绝按钮
-        const rejectBtns = document.querySelectorAll('.reject-verify-btn');
-        rejectBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const studentId = btn.dataset.id;
-                Modal.confirm('拒绝认证', `确定要拒绝学号 ${studentId} 的认证申请吗？`, () => {
-                    Auth.resetVerify();
-                    Toast.show('认证申请已拒绝', 'success');
-                    this.loadData();
-                    this.render();
-                });
-            });
-        });
-    },
-
-    /**
-     * 绑定商品管理事件
-     */
-    bindGoodsEvents() {
-        const deleteBtns = document.querySelectorAll('.delete-goods-btn');
-        deleteBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const goodsId = btn.dataset.id;
-                Modal.confirm('删除商品', '确定要删除该商品吗？', () => {
-                    const goods = Auth.getGoods();
-                    const index = goods.findIndex(g => g.id === goodsId);
-                    if (index !== -1) {
-                        goods.splice(index, 1);
-                        Storage.set(Auth.KEYS.GOODS, goods);
-
-                        // 同步删除收藏
-                        const collects = Auth.getCollects();
-                        const filteredCollects = collects.filter(c => c.goodsId !== goodsId);
-                        Storage.set(Auth.KEYS.COLLECTS, filteredCollects);
-
-                        Toast.show('商品已删除', 'success');
-                        this.loadData();
-                        this.render();
-                    }
-                });
-            });
-        });
+        this.render();
     },
 
     /**
      * 处理登录
      */
     handleLogin() {
-        const username = document.getElementById('adminUsername')?.value || '';
+        const username = document.getElementById('adminUsername')?.value?.trim() || '';
         const password = document.getElementById('adminPassword')?.value || '';
+        const usernameError = document.getElementById('adminUsernameError');
+        const passwordError = document.getElementById('adminPasswordError');
+
+        // 清除错误
+        if (usernameError) {
+            usernameError.textContent = '';
+            usernameError.classList.remove('show');
+        }
+        if (passwordError) {
+            passwordError.textContent = '';
+            passwordError.classList.remove('show');
+        }
 
         // 校验
         if (!username) {
-            document.getElementById('adminUsernameError').textContent = '请输入用户名';
-            document.getElementById('adminUsernameError').classList.add('show');
+            if (usernameError) {
+                usernameError.textContent = '请输入用户名';
+                usernameError.classList.add('show');
+            }
             return;
         }
 
         if (!password) {
-            document.getElementById('adminPasswordError').textContent = '请输入密码';
-            document.getElementById('adminPasswordError').classList.add('show');
+            if (passwordError) {
+                passwordError.textContent = '请输入密码';
+                passwordError.classList.add('show');
+            }
             return;
         }
 
-        // 清除错误
-        document.getElementById('adminUsernameError').classList.remove('show');
-        document.getElementById('adminPasswordError').classList.remove('show');
-
         // 验证账号密码
         if (username === ADMIN_ACCOUNT.username && password === ADMIN_ACCOUNT.password) {
+            localStorage.setItem(ADMIN_KEYS.ADMIN_LOGGED_IN, 'true');
             this.state.isLoggedIn = true;
-            Toast.show('登录成功', 'success');
+            this.showToast('登录成功', 'success');
             this.render();
         } else {
-            document.getElementById('adminPasswordError').textContent = '用户名或密码错误';
-            document.getElementById('adminPasswordError').classList.add('show');
+            if (passwordError) {
+                passwordError.textContent = '用户名或密码错误';
+                passwordError.classList.add('show');
+            }
         }
+    },
+
+    /**
+     * 处理退出登录
+     */
+    handleLogout() {
+        if (confirm('确定要退出管理员登录吗？')) {
+            localStorage.removeItem(ADMIN_KEYS.ADMIN_LOGGED_IN);
+            this.state.isLoggedIn = false;
+            this.state.activeTab = 'verify';
+            this.render();
+        }
+    },
+
+    /**
+     * 【关键】处理认证通过
+     */
+    handleApprove(studentId) {
+        if (confirm(`确定要通过学号 ${studentId} 的认证申请吗？`)) {
+            // 保存处理记录
+            this.saveProcessedVerify(studentId, 'approved');
+            
+            // 更新认证状态为通过
+            localStorage.setItem('hnau_verify_state', 'approved');
+            
+            // 显示提示
+            this.showToast('认证已通过', 'success');
+            
+            // 重新加载并渲染
+            this.loadData();
+            this.render();
+        }
+    },
+
+    /**
+     * 【关键】处理认证拒绝
+     */
+    handleReject(studentId) {
+        if (confirm(`确定要拒绝学号 ${studentId} 的认证申请吗？`)) {
+            // 保存处理记录
+            this.saveProcessedVerify(studentId, 'rejected');
+            
+            // 清除认证信息和状态
+            localStorage.removeItem('hnau_verify_info');
+            localStorage.removeItem('hnau_verify_state');
+            
+            // 显示提示
+            this.showToast('认证申请已拒绝', 'success');
+            
+            // 重新加载并渲染
+            this.loadData();
+            this.render();
+        }
+    },
+
+    /**
+     * 【关键】处理删除商品
+     */
+    handleDeleteGoods(goodsId) {
+        if (confirm('确定要删除该商品吗？')) {
+            // 获取商品列表
+            const goodsStr = localStorage.getItem('hnau_goods');
+            const goods = goodsStr ? JSON.parse(goodsStr) : [];
+            
+            // 找到并删除商品
+            const index = goods.findIndex(g => g.id === goodsId);
+            if (index !== -1) {
+                goods.splice(index, 1);
+                localStorage.setItem('hnau_goods', JSON.stringify(goods));
+                
+                // 同步删除相关收藏
+                const collectsStr = localStorage.getItem('hnau_collects');
+                const collects = collectsStr ? JSON.parse(collectsStr) : [];
+                const filteredCollects = collects.filter(c => c.goodsId !== goodsId);
+                localStorage.setItem('hnau_collects', JSON.stringify(filteredCollects));
+                
+                this.showToast('商品已删除', 'success');
+                this.loadData();
+                this.render();
+            }
+        }
+    },
+
+    /**
+     * 显示图片预览
+     */
+    showImagePreview(src) {
+        // 创建预览模态框
+        const modal = document.createElement('div');
+        modal.className = 'image-preview-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;';
+        modal.innerHTML = `
+            <img src="${src}" style="max-width:90%;max-height:90%;object-fit:contain;" />
+            <button style="position:absolute;top:20px;right:20px;width:40px;height:40px;background:rgba(255,255,255,0.2);border:none;border-radius:50%;color:white;font-size:24px;cursor:pointer;">×</button>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // 点击关闭
+        modal.querySelector('button').addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    },
+
+    // ==========================================
+    // 数据加载和存储方法
+    // ==========================================
+
+    /**
+     * 加载数据
+     */
+    loadData() {
+        // 待审核认证（排除已处理的）
+        const processedIds = this.getProcessedVerifyIds();
+        const verifyInfo = this.getVerifyInfo();
+        const verifyState = this.getVerifyState();
+
+        this.state.pendingVerifies = [];
+        if (verifyState === 'pending' && verifyInfo && !processedIds.includes(verifyInfo.studentId)) {
+            this.state.pendingVerifies.push(verifyInfo);
+        }
+
+        // 用户列表
+        const usersStr = localStorage.getItem('hnau_users');
+        this.state.users = usersStr ? JSON.parse(usersStr) : [];
+
+        // 商品列表
+        const goodsStr = localStorage.getItem('hnau_goods');
+        this.state.goods = goodsStr ? JSON.parse(goodsStr) : [];
+    },
+
+    /**
+     * 获取认证信息
+     */
+    getVerifyInfo() {
+        const str = localStorage.getItem('hnau_verify_info');
+        return str ? JSON.parse(str) : null;
+    },
+
+    /**
+     * 获取认证状态
+     */
+    getVerifyState() {
+        return localStorage.getItem('hnau_verify_state') || 'unsubmitted';
+    },
+
+    /**
+     * 获取已处理的认证ID列表
+     */
+    getProcessedVerifyIds() {
+        const str = localStorage.getItem(ADMIN_KEYS.PROCESSED_VERIFIES);
+        const processed = str ? JSON.parse(str) : [];
+        return processed.map(p => p.studentId);
+    },
+
+    /**
+     * 保存已处理的认证记录
+     */
+    saveProcessedVerify(studentId, action) {
+        const str = localStorage.getItem(ADMIN_KEYS.PROCESSED_VERIFIES);
+        const processed = str ? JSON.parse(str) : [];
+        
+        processed.push({
+            studentId: studentId,
+            action: action,
+            time: new Date().toISOString()
+        });
+        
+        localStorage.setItem(ADMIN_KEYS.PROCESSED_VERIFIES, JSON.stringify(processed));
+    },
+
+    // ==========================================
+    // 工具方法
+    // ==========================================
+
+    /**
+     * HTML转义
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    /**
+     * 格式化日期
+     */
+    formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '-';
+        
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+    },
+
+    /**
+     * 显示提示
+     */
+    showToast(message, type) {
+        // 简单提示实现
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.style.cssText = 'position:fixed;top:100px;right:20px;padding:15px 20px;background:white;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:10000;';
+        toast.innerHTML = `
+            <span style="color: ${type === 'success' ? '#198754' : type === 'error' ? '#DC3545' : '#0D6EFD'};">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span>
+            <span style="margin-left:10px;">${message}</span>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
     }
 };
 
+// ==========================================
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('adminContent')) {
+// ==========================================
+document.addEventListener('DOMContentLoaded', function() {
+    // 延迟初始化，确保DOM完全加载
+    setTimeout(() => {
         AdminModule.init();
-    }
+    }, 100);
 });
-
-// 定时刷新数据
-setInterval(() => {
-    if (document.getElementById('adminContent') && AdminModule.state.isLoggedIn) {
-        AdminModule.loadData();
-    }
-}, 5000);
