@@ -41,6 +41,11 @@ const AdminModule = {
         } else {
             this.renderDashboard(container);
         }
+
+        // 渲染完成后绑定事件
+        setTimeout(() => {
+            this.bindEvents();
+        }, 50);
     },
 
     /**
@@ -134,6 +139,9 @@ const AdminModule = {
                 </div>
             </div>
         `;
+
+        // 绑定仪表盘事件
+        this.bindDashboardEvents();
     },
 
     /**
@@ -319,6 +327,25 @@ const AdminModule = {
      * 绑定事件
      */
     bindEvents() {
+        if (!this.state.isLoggedIn) {
+            // 登录表单事件
+            const form = document.getElementById('adminLoginForm');
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.handleLogin();
+                });
+            }
+        } else {
+            // 仪表盘事件
+            this.bindDashboardEvents();
+        }
+    },
+
+    /**
+     * 绑定仪表盘事件
+     */
+    bindDashboardEvents() {
         // 退出登录
         const logoutBtn = document.getElementById('adminLogoutBtn');
         if (logoutBtn) {
@@ -326,6 +353,7 @@ const AdminModule = {
                 Modal.confirm('退出登录', '确定要退出管理员登录吗？', () => {
                     this.state.isLoggedIn = false;
                     this.render();
+                    this.bindEvents();
                 });
             });
         }
