@@ -44,6 +44,97 @@ const AdminModule = {
         this.checkLoginStatus();
         this.render();
         this.bindEvents();
+        // 【新增】监听 localStorage 变化，实现跨页面数据同步
+        this.bindStorageListener();
+    },
+
+    /**
+     * 【新增】监听 localStorage 变化
+     * 当其他页面（如校园认证页）修改数据时，自动刷新认证审核列表
+     */
+    bindStorageListener() {
+        // 移除旧监听器（防止重复）
+        if (this._storageListener) {
+            window.removeEventListener('storage', this._storageListener);
+        }
+
+        // 创建监听器
+        this._storageListener = (e) => {
+            // 只监听认证相关的数据变化
+            if (!e.key || 
+                (e.key !== ADMIN_KEYS.VERIFY_INFO && 
+                 e.key !== ADMIN_KEYS.VERIFY_STATE &&
+                 e.key !== ADMIN_KEYS.USERS &&
+                 e.key !== ADMIN_KEYS.GOODS)) {
+                return;
+            }
+
+            // 如果当前已登录且在认证审核标签，自动刷新数据
+            if (this.state.isLoggedIn && this.state.activeTab === 'verify') {
+                console.log('[Admin] 检测到认证数据变化，自动刷新...');
+                // 延迟一点执行，确保 localStorage 已经更新完成
+                setTimeout(() => {
+                    this.refreshVerifyData();
+                }, 50);
+            }
+
+            // 如果当前已登录且在用户管理标签，刷新用户列表
+            if (this.state.isLoggedIn && this.state.activeTab === 'users') {
+                const usersPanel = document.getElementById('usersPanel');
+                if (usersPanel) {
+                    usersPanel.innerHTML = this.renderUsersList();
+                }
+            }
+
+            // 如果当前已登录且在商品管理标签，刷新商品列表
+            if (this.state.isLoggedIn && this.state.activeTab === 'goods') {
+                const goodsPanel = document.getElementById('goodsPanel');
+                if (goodsPanel) {
+                    goodsPanel.innerHTML = this.renderGoodsList();
+                }
+            }
+
+            // 如果当前已登录，刷新顶部统计数字
+            if (this.state.isLoggedIn) {
+                const pendingCount = this.getPendingCount();
+                const pendingCountEl = document.getElementById('pendingCountNum');
+                if (pendingCountEl) {
+                    pendingCountEl.textContent = pendingCount;
+                }
+
+                // 更新标签徽章
+                const verifyTab = document.querySelector('.tabs-nav-item[data-tab="verify"]');
+                if (verifyTab) {
+                    let badge = verifyTab.querySelector('.tabs-badge');
+                    if (pendingCount > 0) {
+                        if (badge) {
+                            badge.textContent = pendingCount;
+                        } else {
+                            badge = document.createElement('span');
+                            badge.className = 'tabs-badge';
+                            badge.textContent = pendingCount;
+                            verifyTab.appendChild(badge);
+                        }
+                    } else if (badge) {
+                        badge.remove();
+                    }
+                }
+            }
+        };
+
+        // 添加监听器
+        window.addEventListener('storage', this._storageListener);
+
+        // 【额外功能】页面可见性变化时刷新数据
+        // 当用户从其他页面切换回管理员页面时，检查是否有数据更新
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.state.isLoggedIn) {
+                console.log('[Admin] 页面恢复可见，刷新数据...');
+                if (this.state.activeTab === 'verify') {
+                    this.refreshVerifyData();
+                }
+            }
+        });
     },
 
     /**
@@ -972,6 +1063,94 @@ const AdminModule = {
             } else {
                 panel.classList.remove('active');
             }
+        });
+
+        // 【关键修改】切换到认证审核标签时，自动刷新数据和列表
+        if (tabName === 'verify') {
+            this.refreshVerifyData();
+        }
+    },
+
+    /**
+     * 【新增】刷新认证审核数据
+     * 用于切换标签时和跨页面数据同步
+     */
+    refreshVerifyData() {
+        // 1. 更新顶部统计数字
+        const pendingCount = this.getPendingCount();
+        const pendingCountEl = document.getElementById('pendingCountNum');
+        if (pendingCountEl) {
+            pendingCountEl.textContent = pendingCount;
+        }
+
+        // 2. 更新标签页上的待审核数量徽章
+        const tabBadge = document.querySelector('.tabs-nav-item[data-tab="verify"] .tabs-badge');
+        if (pendingCount > 0) {
+            if (tabBadge) {
+                tabBadge.textContent = pendingCount;
+            } else {
+                const verifyTab = document.querySelector('.tabs-nav-item[data-tab="verify"]');
+                if (verifyTab) {
+                    const badge = document.createElement('span');
+                    badge.className = 'tabs-badge';
+                    badge.textContent = pendingCount;
+                    verifyTab.appendChild(badge);
+                }
+            }
+        } else if (tabBadge) {
+            tabBadge.remove();
+        }
+
+        // 3. 重新渲染认证审核列表
+        const verifyPanel = document.getElementById('verifyPanel');
+        if (verifyPanel) {
+            verifyPanel.innerHTML = this.renderVerifyList();
+            // 重新绑定认证审核相关事件
+            this.bindVerifyPanelEvents();
+        }
+    },
+
+    /**
+     * 【新增】绑定认证审核面板内的事件
+     * 用于刷新列表后重新绑定按钮事件
+     */
+    bindVerifyPanelEvents() {
+        const container = document.getElementById('adminContent');
+        if (!container) return;
+
+        // 绑定通过按钮
+        container.querySelectorAll('.approve-btn').forEach(btn => {
+            btn.onclick = null;
+            btn.addEventListener('click', () => {
+                const studentId = btn.getAttribute('data-id');
+                this.showConfirm(
+                    '通过认证',
+                    `确定要通过学号「${studentId}」的认证申请吗？`,
+                    () => this.approveVerify(studentId)
+                );
+            });
+        });
+
+        // 绑定拒绝按钮
+        container.querySelectorAll('.reject-btn').forEach(btn => {
+            btn.onclick = null;
+            btn.addEventListener('click', () => {
+                this.showConfirm(
+                    '拒绝认证',
+                    `确定要拒绝该认证申请吗？`,
+                    () => this.rejectVerify()
+                );
+            });
+        });
+
+        // 绑定图片预览
+        container.querySelectorAll('.verify-image').forEach(img => {
+            img.onclick = null;
+            img.addEventListener('click', () => {
+                if (img.src) {
+                    this.showImagePreview(img.src);
+                }
+            });
         });
     },
 
