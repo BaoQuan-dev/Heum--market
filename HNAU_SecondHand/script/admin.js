@@ -380,8 +380,10 @@ const AdminModule = {
     getPendingCount() {
         try {
             const verifyState = localStorage.getItem(ADMIN_KEYS.VERIFY_STATE);
+            console.log('[Admin] 读取认证状态:', verifyState);
             return verifyState === VERIFY_STATES.PENDING ? 1 : 0;
         } catch (e) {
+            console.error('[Admin] 读取认证状态失败:', e);
             return 0;
         }
     },
@@ -426,14 +428,21 @@ const AdminModule = {
 
         try {
             const verifyState = localStorage.getItem(ADMIN_KEYS.VERIFY_STATE);
+            console.log('[Admin] renderVerifyList - 认证状态:', verifyState);
+            
             if (verifyState === VERIFY_STATES.PENDING) {
                 const verifyInfoStr = localStorage.getItem(ADMIN_KEYS.VERIFY_INFO);
+                console.log('[Admin] renderVerifyList - 认证信息:', verifyInfoStr ? '存在' : '不存在');
+                
                 if (verifyInfoStr) {
                     pendingVerify = JSON.parse(verifyInfoStr);
+                    console.log('[Admin] renderVerifyList - 解析后数据:', pendingVerify);
                 }
+            } else {
+                console.log('[Admin] renderVerifyList - 状态不是 pending，无需渲染列表');
             }
         } catch (e) {
-            console.warn('[Admin] 读取认证信息失败:', e);
+            console.error('[Admin] renderVerifyList - 读取认证信息失败:', e);
         }
 
         // 无待审核数据
