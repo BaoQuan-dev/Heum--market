@@ -439,24 +439,18 @@ const LoginModule = {
                 return;
             }
 
-            // 创建用户 - 【关键修改】添加 authStatus 字段和关联认证信息
-            const verifyInfo = Auth.getVerifyInfo();
+            // 【修复】创建用户 - 注册时authStatus必须为'unsubmitted'，不能自动认证
             const userInfo = {
                 username: username,
                 password: password,
                 regTime: Utils.formatDate(new Date()),
-                authStatus: verifyInfo ? 'approved' : 'unsubmitted',  // 如果有认证信息，直接设为已认证
-                studentId: verifyInfo ? verifyInfo.studentId : '',      // 关联学号
-                campus: verifyInfo ? verifyInfo.campus : '',             // 关联校区
-                college: verifyInfo ? verifyInfo.college : ''           // 关联学院
+                authStatus: 'unsubmitted',  // 【修复】注册时默认未提交，必须完成校园认证才能发布
+                studentId: '',      // 认证通过后关联学号
+                campus: '',         // 认证通过后关联校区
+                college: ''         // 认证通过后关联学院
             };
 
             Auth.registerUser(userInfo);
-
-            // 【新增】如果有关联的认证信息，同步更新 pendingAuths 记录
-            if (verifyInfo) {
-                Auth.updatePendingAuthByStudentId(verifyInfo.studentId, 'approved', username);
-            }
 
             Toast.show('注册成功！请切换到登录页登录', 'success');
 

@@ -328,16 +328,8 @@ const Auth = {
             };
         }
         
-        // 获取用户的认证状态
-        let verifyState = this.getUserAuthStatus(loginState.curUser);
-        
-        // 如果用户数据中没有 authStatus，使用全局状态（兼容旧数据）
-        if (!verifyState || verifyState === 'unsubmitted') {
-            const globalVerifyState = this.getVerifyState();
-            if (globalVerifyState && globalVerifyState !== 'unsubmitted') {
-                verifyState = globalVerifyState;
-            }
-        }
+        // 【修复】严格读取用户数据中的authStatus，禁止用全局状态覆盖用户状态
+        const verifyState = this.getUserAuthStatus(loginState.curUser);
         
         console.log('[Auth] 发布权限校验 - 用户:', loginState.curUser, '| 认证状态:', verifyState);
 
